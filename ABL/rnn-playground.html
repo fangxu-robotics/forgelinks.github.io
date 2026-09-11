@@ -1,0 +1,758 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Weather RNN Playground — 2 inputs, 3 hidden neurons, real forecasting</title>
+<style>
+  :root{
+    --navy:#1E2761; --mid:#4A6FA5; --ice:#CADCFC; --tint:#EEF3FC;
+    --coral:#F96167; --coral-t:#FDE1E2; --ink:#3A4356; --line:#DCE4F4;
+    --paper:#FFFFFF; --wash:#F6F8FD; --gray:#6B7280; --green:#3E9E70; --warm:#E1574B; --cold:#3E6FB0;
+    --serif:"Iowan Old Style","Palatino Linotype",Palatino,Cambria,Georgia,serif;
+    --sans:"Segoe UI",-apple-system,BlinkMacSystemFont,"Helvetica Neue",Arial,sans-serif;
+    --mono:Consolas,Menlo,"Courier New",monospace;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0}
+  body{background:var(--wash);color:var(--ink);font-family:var(--sans);font-size:15px;line-height:1.5}
+  .wrap{max-width:1300px;margin:0 auto;padding:26px 24px 60px}
+
+  header{margin-bottom:14px}
+  header h1{font-family:var(--serif);color:var(--navy);font-size:29px;margin:0 0 6px;font-weight:700}
+  header p{margin:0;color:var(--gray);font-size:14px;max-width:96ch}
+  header b{color:var(--navy)}
+
+  .panel{background:var(--paper);border:1px solid var(--line);border-radius:14px;
+         padding:16px 20px 18px;margin-top:14px}
+  .panel h2{font-family:var(--serif);color:var(--navy);font-size:19px;margin:0 0 2px;font-weight:700}
+  .panel p.sub{margin:0 0 12px;color:var(--gray);font-size:13px}
+  .panelhead{display:flex;flex-wrap:wrap;align-items:baseline;gap:10px 18px}
+  .score{margin-left:auto;font:600 13px var(--mono);color:var(--navy);background:var(--tint);
+         border:1px solid var(--line);border-radius:8px;padding:5px 11px;white-space:nowrap}
+  .score b{color:var(--coral)}
+
+  .toolbar{display:flex;flex-wrap:wrap;gap:12px 22px;align-items:center}
+  .toolbar > *{margin-right:10px}
+  .ctl{display:flex;align-items:center;gap:8px}
+  .ctl .name{font-size:13px;color:var(--navy);font-weight:600;white-space:nowrap}
+  .seg{display:inline-flex;border:1px solid var(--line);border-radius:8px;overflow:hidden;background:var(--tint)}
+  .seg button{border:0;background:transparent;padding:5px 12px;font:600 12.5px var(--sans);
+              color:var(--mid);cursor:pointer;white-space:nowrap}
+  .seg button.on{background:var(--navy);color:#fff}
+  .seg button:focus-visible{outline:2px solid var(--coral);outline-offset:-2px}
+  .phint{margin-top:9px;font-size:12.5px;color:var(--gray);font-style:italic}
+  .phint b{color:var(--navy);font-style:normal}
+
+  /* ---------- rolled ---------- */
+  .rolledwrap{display:flex;gap:26px;align-items:center;flex-wrap:wrap;justify-content:center}
+  .loop-path{stroke:var(--mid);transition:stroke .25s, stroke-width .25s}
+  .fire .loop-path{stroke:var(--coral);stroke-width:3.4}
+  .fire .loop-lab{fill:var(--coral)}
+  .formulacard{background:var(--tint);border:1px solid var(--line);border-radius:10px;
+               padding:12px 16px;max-width:440px}
+  .formulacard .f{font-family:var(--mono);font-size:13.5px;color:var(--navy);margin-bottom:2px}
+  .formulacard .f .yq{color:var(--green)}
+  .formulacard .n{font-size:12.5px;color:var(--gray);line-height:1.55;margin-top:6px}
+  .formulacard .n b{color:var(--navy)}
+
+  .transport{display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:center;margin:16px 0 2px}
+  button.btn{border:1px solid var(--line);background:var(--tint);color:var(--navy);
+             border-radius:9px;padding:8px 16px;cursor:pointer;font:600 13.5px var(--sans)}
+  button.btn:hover{background:#E3ECFB}
+  button.btn.primary{background:var(--navy);border-color:var(--navy);color:#fff;font-size:14.5px;padding:9px 22px}
+  button.btn.primary:hover{background:#27327A}
+  button.btn:focus-visible{outline:2px solid var(--coral);outline-offset:2px}
+  .tickbadge{font:600 13.5px var(--mono);color:var(--navy);background:var(--paper);
+             border:1px solid var(--line);border-radius:8px;padding:7px 12px}
+  .tickbadge b{color:var(--coral)}
+
+  /* ---------- weights ---------- */
+  .wgrids{display:flex;flex-wrap:wrap;gap:10px 26px;align-items:flex-start;justify-content:center}
+  .wblock{text-align:center}
+  .wblock .wt{font:600 12px var(--sans);color:var(--navy);margin-bottom:6px}
+  .wblock .wt span{color:var(--gray);font-weight:500}
+  .wgrid{display:grid;gap:4px;width:max-content;margin:0 auto}
+  .wgrid input{width:52px;height:30px;text-align:center;font:600 12px var(--mono);color:var(--navy);
+               border:1px solid var(--line);border-radius:6px;background:var(--tint);padding:0}
+  .wgrid input.neg{color:#C4373D;background:var(--coral-t)}
+  .wgrid input.zero{color:#98A2BC;background:#fff}
+  .wgrid input:focus{outline:2px solid var(--coral);outline-offset:1px;background:#fff}
+  .wsym{align-self:center;font-family:var(--serif);font-size:18px;color:var(--mid);margin-top:14px}
+
+  /* ---------- chain ---------- */
+  .chainouter{overflow-x:auto;padding:6px 2px 2px}
+  .chain{display:flex;align-items:flex-start;gap:0;width:max-content;margin:0 auto;padding-top:6px}
+  .h0col{display:flex;flex-direction:column;align-items:center;width:70px}
+  .h0chip{background:var(--tint);border:1.5px solid var(--mid);border-radius:9px;
+          padding:7px 8px;font:600 11.5px var(--mono);color:var(--navy);margin-top:122px;white-space:nowrap}
+  .h0lab{font-size:10.5px;color:var(--gray);margin-top:6px;text-align:center}
+
+  .col{position:relative;display:flex;flex-direction:column;align-items:center;width:112px;margin-left:32px}
+  .conn{position:absolute;left:-32px;top:139px;width:32px;height:0;border-top:2px solid var(--mid)}
+  .conn::after{content:"";position:absolute;right:-1px;top:-5px;
+        border-left:8px solid var(--mid);border-top:4px solid transparent;border-bottom:4px solid transparent}
+  .conn .wlab{position:absolute;left:50%;top:-16px;transform:translateX(-50%);
+        font:600 9.5px var(--mono);color:var(--mid);background:var(--paper);padding:0 3px}
+  .predcard{width:110px;border:1.5px solid var(--green);border-radius:10px;background:#fff;
+            padding:5px 6px 6px;text-align:center}
+  .predcard .plab{font:600 9.5px var(--sans);color:var(--green);letter-spacing:.4px}
+  .predcard .pvals{font:700 13px var(--mono);margin-top:2px}
+  .predcard .pvals .tv{margin-right:7px}
+  .predcard .pact{font:500 10px var(--sans);color:var(--gray);margin-top:3px;line-height:1.35}
+  .predcard .pact b{color:var(--ink)}
+  .predcard.final{border-color:var(--coral);background:#FFF7F7}
+  .predcard.final .plab{color:var(--coral)}
+  .uparr{width:0;height:16px;border-left:2px solid var(--green);position:relative;margin:3px 0 2px}
+  .uparr::before{content:"";position:absolute;top:-1px;left:-5px;
+        border-bottom:8px solid var(--green);border-left:4px solid transparent;border-right:4px solid transparent}
+  .uparr .wlab{position:absolute;left:7px;top:1px;font:600 9.5px var(--mono);color:var(--green);white-space:nowrap}
+  .uparr.xarr{border-color:var(--coral);height:20px}
+  .uparr.xarr::before{border-bottom-color:var(--coral)}
+  .uparr.xarr .wlab{color:var(--coral);top:4px}
+  .cellbox{width:108px;border-radius:14px;border:1.5px solid var(--mid);background:#fff;
+           padding:7px 7px 6px;cursor:crosshair;position:relative}
+  .cellbox .cellname{position:absolute;top:-9px;left:50%;transform:translateX(-50%);
+        font:700 8.5px var(--sans);letter-spacing:1px;color:var(--mid);background:var(--paper);
+        padding:0 5px;white-space:nowrap}
+  .nrow{display:flex;align-items:center;gap:4px;height:24px}
+  .nrow .ni{font:600 9px var(--sans);color:var(--gray);width:12px}
+  .nrow .nbar{position:relative;width:46px;height:10px;background:var(--tint);border-radius:5px;overflow:hidden}
+  .nrow .nbar i{position:absolute;top:0;bottom:0;left:50%;background:var(--mid)}
+  .nrow .nbar::after{content:"";position:absolute;left:50%;top:0;bottom:0;width:1px;background:#C9D4EA}
+  .nrow .nv{font:600 10.5px var(--mono);color:var(--navy);width:32px;text-align:right}
+  .nrow:hover{background:var(--tint);border-radius:6px}
+  .cellsub{text-align:center;font:600 9.5px var(--sans);color:var(--gray);margin-top:2px}
+  .xrow{display:flex;align-items:center;gap:4px;margin-top:3px}
+  .xtag{font:700 10px var(--sans);width:12px;text-align:center}
+  .xtag.t{color:var(--warm)} .xtag.h{color:var(--green)}
+  .xin{width:56px;text-align:center;font:600 12px var(--mono);color:var(--navy);
+       border:1.5px solid var(--line);border-radius:7px;background:var(--tint);padding:4px 2px}
+  .xin:focus{outline:2px solid var(--coral);outline-offset:1px;background:#fff}
+  .xunit{font:500 10px var(--sans);color:var(--gray);width:20px}
+  .daylab{font:700 11px var(--sans);color:var(--navy);margin-top:5px}
+  .col.ghost .cellbox{border-style:dashed;border-color:#C7D2EA;background:#FBFCFF;cursor:default}
+  .col.ghost .nrow .nv{color:#B4BDD4}
+  .col.ghost .nrow .nbar i{background:#D6DEEF}
+  .col.ghost .conn{border-top-style:dashed;border-color:#C7D2EA}
+  .col.ghost .conn::after{border-left-color:#C7D2EA}
+  .col.ghost .conn .wlab{color:#B4BDD4}
+  .col.ghost .predcard{border-style:dashed;border-color:#CFE5D9}
+  .col.ghost .predcard .plab{color:#9FC5B0}
+  .col.ghost .predcard .pvals{color:#B4BDD4}
+  .col.ghost .uparr{opacity:.45}
+  .cellbox.now{box-shadow:0 0 0 3px var(--coral-t);border-color:var(--coral)}
+  .cellbox.hl{outline:2.5px solid var(--coral);outline-offset:2px}
+  .cellbox.prev{outline:2.5px solid var(--navy);outline-offset:2px}
+  .xin.hl{outline:2.5px solid var(--coral);outline-offset:1px}
+  .predcard.hl{outline:2.5px solid var(--green);outline-offset:2px}
+  .h0chip.prev{outline:2.5px solid var(--navy);outline-offset:2px}
+  @keyframes pop{0%{transform:scale(.8);opacity:.2}100%{transform:scale(1);opacity:1}}
+  .col.pop .cellbox{animation:pop .32s ease-out}
+  @media (prefers-reduced-motion: reduce){ .col.pop .cellbox{animation:none} }
+
+  .bracket{border-top:2px solid var(--ice);margin:16px 8px 0;position:relative;height:22px}
+  .bracket span{position:absolute;left:50%;top:-11px;transform:translateX(-50%);
+        background:var(--paper);padding:0 12px;font-size:12px;color:var(--gray);white-space:nowrap}
+  .bracket b{color:var(--navy)}
+
+  /* ---------- inspector ---------- */
+  .inspector{background:var(--tint);border:1px solid var(--line);border-radius:10px;
+             padding:12px 16px;min-height:80px;margin-top:12px;font-family:var(--mono);
+             font-size:12.5px;color:var(--ink)}
+  .inspector .hint{font-family:var(--sans);color:var(--gray);font-size:13px}
+  .mrow{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin:4px 0}
+  .mg{display:grid;gap:2px}
+  .mg .mc{width:46px;height:22px;display:flex;align-items:center;justify-content:center;
+          background:#fff;border:1px solid var(--line);font:600 10.5px var(--mono);color:var(--ink)}
+  .mg .mc.res{background:var(--coral-t);color:#C4373D}
+  .mg .mc.hres{background:#E4F2EA;color:var(--green)}
+  .mg .mc.rh{outline:2px solid var(--coral);outline-offset:-2px;z-index:2}
+  .mgl{font:600 9.5px var(--sans);color:var(--gray);text-align:center;margin-top:3px}
+  .msym{font-family:var(--serif);font-size:16px;color:var(--navy);padding:0 1px}
+  .mnote{font-family:var(--sans);font-size:12px;color:var(--gray)}
+  .mnote b{color:var(--navy)}
+  .nline{margin-top:6px;font-size:12px;color:var(--ink)}
+  .nline .big{color:var(--coral);font-weight:700}
+
+  .tries{display:flex;flex-wrap:wrap;gap:12px;margin-top:4px}
+  .try{flex:1 1 300px;background:var(--paper);border:1px solid var(--line);border-radius:10px;
+       padding:11px 14px;font-size:12.5px;color:var(--ink);line-height:1.55}
+  .try b{color:var(--navy)}
+  .try .n{display:inline-block;background:var(--coral);color:#fff;border-radius:50%;
+          width:18px;height:18px;text-align:center;font:700 11px/18px var(--sans);margin-right:6px}
+
+  footer{margin-top:22px;color:var(--gray);font-size:12.5px;text-align:center}
+  footer b{color:var(--navy)}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <h1>Weather RNN Playground — 2 inputs &#183; 3 hidden neurons &#183; a real forecast</h1>
+  <p>Each day the network reads <b>two numbers</b> — temperature and humidity — updates its
+     <b>3-neuron memory h</b>, and guesses <b>tomorrow&#8217;s weather</b>.
+     Same idea as before, but x, h and y are now <b>vectors</b>, and the weights are <b>matrices</b>.
+     Step through the week and check every guess against what actually happened.</p>
+</header>
+
+<!-- ============ toolbar ============ -->
+<div class="panel">
+  <div class="toolbar">
+    <div class="ctl"><span class="name">This week&#8217;s weather</span>
+      <div class="seg" id="wkpreset"></div>
+    </div>
+    <div class="ctl"><span class="name">Weights</span>
+      <div class="seg" id="wtpreset"></div>
+    </div>
+  </div>
+  <div class="phint" id="phint"></div>
+</div>
+
+<!-- ============ rolled ============ -->
+<div class="panel">
+  <h2>The rolled view — one cell, now with vectors flowing through it</h2>
+  <p class="sub">Two numbers enter, three memory numbers circulate, two numbers leave. The arrows carry whole vectors; the weights are matrices whose shapes make the sizes match.</p>
+  <div class="rolledwrap">
+    <svg id="rolledsvg" width="420" height="266" viewBox="0 0 420 266" role="img" aria-label="vector RNN cell">
+      <defs>
+        <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7.5" markerHeight="7.5" orient="auto-start-reverse">
+          <path d="M 0 0 L 10 5 L 0 10 z" fill="#4A6FA5"></path></marker>
+        <marker id="arrC" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7.5" markerHeight="7.5" orient="auto-start-reverse">
+          <path d="M 0 0 L 10 5 L 0 10 z" fill="#F96167"></path></marker>
+        <marker id="arrG" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7.5" markerHeight="7.5" orient="auto-start-reverse">
+          <path d="M 0 0 L 10 5 L 0 10 z" fill="#3E9E70"></path></marker>
+      </defs>
+      <line x1="168" y1="64" x2="168" y2="28" stroke="#3E9E70" stroke-width="2.6" marker-end="url(#arrG)"></line>
+      <text x="179" y="48" font-family="Consolas,monospace" font-size="11.5" font-weight="700" fill="#3E9E70">&#215; Wy (2&#215;3)</text>
+      <text id="rolledY" x="168" y="16" font-family="Consolas,monospace" font-size="13"
+            font-weight="700" fill="#3E9E70" text-anchor="middle">guess: &#8212;</text>
+      <g id="loopgroup">
+        <path class="loop-path" d="M 252 114 C 336 114, 336 40, 240 42 C 228 42.5, 222 49, 220 62"
+              fill="none" stroke-width="2.6" marker-end="url(#arr)"></path>
+        <text class="loop-lab" x="357" y="70" font-family="Consolas,monospace" font-size="11.5"
+              font-weight="700" fill="#4A6FA5" text-anchor="middle">&#215; Wh (3&#215;3)</text>
+        <text x="357" y="86" font-family="Segoe UI,Arial" font-size="10" fill="#6B7280" text-anchor="middle">3 memory numbers</text>
+        <text x="357" y="99" font-family="Segoe UI,Arial" font-size="10" fill="#6B7280" text-anchor="middle">come back next day</text>
+      </g>
+      <rect x="128" y="66" width="124" height="82" rx="14" fill="#EEF3FC" stroke="#4A6FA5" stroke-width="1.8"></rect>
+      <text x="190" y="92" font-family="Segoe UI,Arial" font-size="10.5" fill="#6B7280" text-anchor="middle">memory h (3 neurons)</text>
+      <text id="rolledH" x="190" y="112" font-family="Consolas,monospace" font-size="11.5"
+            font-weight="700" fill="#1E2761" text-anchor="middle">(0.00, 0.00, 0.00)</text>
+      <text id="rolledT" x="190" y="132" font-family="Segoe UI,Arial" font-size="10.5"
+            fill="#6B7280" text-anchor="middle">before Day 1</text>
+      <line x1="190" y1="232" x2="190" y2="154" stroke="#F96167" stroke-width="2.6" marker-end="url(#arrC)"></line>
+      <text x="202" y="190" font-family="Consolas,monospace" font-size="11.5" font-weight="700" fill="#F96167">&#215; Wx (3&#215;2)</text>
+      <text id="rolledX" x="190" y="252" font-family="Consolas,monospace" font-size="12.5"
+            font-weight="700" fill="#1E2761" text-anchor="middle">next in: Day 1 &#8594; 10&#176; &#183; 83%</text>
+      <line x1="58" y1="107" x2="122" y2="107" stroke="#9AA8C8" stroke-width="1.8" stroke-dasharray="4 4" marker-end="url(#arr)"></line>
+      <text x="54" y="111" font-family="Consolas,monospace" font-size="11.5" fill="#6B7280" text-anchor="end">+ b (3)</text>
+    </svg>
+    <div class="formulacard">
+      <div class="f">h<sub>t</sub> = tanh( Wx&#183;x<sub>t</sub> + Wh&#183;h<sub>t&#8722;1</sub> + b )</div>
+      <div class="f"><span class="yq">&#375;<sub>t</sub> = Wy&#183;h<sub>t</sub> + by&nbsp;&nbsp;&#8592; tomorrow&#8217;s (T, H), scaled</span></div>
+      <div class="n">Exactly the scalar rules, upgraded to matrices: <b>Wx is 3&#215;2</b> (2 inputs feed 3 neurons),
+        <b>Wh is 3&#215;3</b> (3 memories feed 3 neurons), <b>Wy is 2&#215;3</b> (3 memories are read out into 2 predictions).
+        Temperatures are scaled as (T&#8722;15)/10 and humidity as (H&#8722;60)/25 so everything lives near &#177;1.</div>
+    </div>
+  </div>
+
+  <div class="transport">
+    <button class="btn" id="reset">&#10226; Reset</button>
+    <button class="btn" id="back">&#9664; Back</button>
+    <button class="btn primary" id="step">Step &#9654; &nbsp;next day</button>
+    <button class="btn" id="play">&#9654; Play the week</button>
+    <span class="tickbadge">day = <b id="tnow">0</b> / <span id="tmax">8</span></span>
+  </div>
+</div>
+
+<!-- ============ weights ============ -->
+<div class="panel">
+  <div class="panelhead"><h2>The 26 numbers — everything the network knows</h2></div>
+  <p class="sub" id="wthint">Pick a preset above, or edit any cell (the whole week recomputes live). Rows = which neuron; columns = which input.</p>
+  <div class="wgrids">
+    <div class="wblock"><div class="wt">Wx <span>&#183; input &#8594; hidden (3&#215;2)</span></div><div class="wgrid" id="gWx"></div></div>
+    <div class="wsym">+</div>
+    <div class="wblock"><div class="wt">Wh <span>&#183; memory &#8594; hidden (3&#215;3)</span></div><div class="wgrid" id="gWh"></div></div>
+    <div class="wsym">+</div>
+    <div class="wblock"><div class="wt">b <span>&#183; (3)</span></div><div class="wgrid" id="gb"></div></div>
+    <div class="wsym">&#8594;</div>
+    <div class="wblock"><div class="wt">Wy <span>&#183; hidden &#8594; output (2&#215;3)</span></div><div class="wgrid" id="gWy"></div></div>
+    <div class="wsym">+</div>
+    <div class="wblock"><div class="wt">by <span>&#183; (2)</span></div><div class="wgrid" id="gby"></div></div>
+  </div>
+</div>
+
+<!-- ============ unrolled ============ -->
+<div class="panel">
+  <div class="panelhead">
+    <h2>The unrolled week — same cell, stamped once per day</h2>
+    <span class="score" id="score">avg miss so far: &#8212;</span>
+  </div>
+  <p class="sub">Bottom to top in each column: today&#8217;s weather &#8594; the 3-neuron memory &#8594; the guess for tomorrow, checked against what really happened. Hover a cell for the full matrix arithmetic; hover a single neuron bar for just that neuron&#8217;s sum. Day 8&#8217;s guess is a true forecast — Day 9 hasn&#8217;t happened.</p>
+  <div class="chainouter"><div class="chain" id="chain"></div></div>
+  <div class="bracket"><span>one set of matrices — <b>Wx, Wh, Wy, b, by</b> — reused every single day. That sharing is what &#8220;recurrent&#8221; means.</span></div>
+  <div class="inspector" id="insp"><span class="hint">Press Step, or hover a solid cell.</span></div>
+</div>
+
+<!-- ============ experiments ============ -->
+<div class="panel">
+  <h2>Three experiments to try</h2>
+  <div class="tries">
+    <div class="try"><span class="n">1</span><b>The forecasting ladder.</b> On <b>Warming week</b>, Play through with
+      <b>Always average</b>, then <b>Copy today</b>, then <b>Trained</b>. Watch the avg-miss badge drop each time —
+      that gap is exactly what learning bought.</div>
+    <div class="try"><span class="n">2</span><b>Break the memory.</b> With <b>Trained</b> weights, set all 9 numbers of
+      <b>Wh to 0</b>. The network still sees today, but forgets every yesterday — the rising trend gets missed and the miss grows.
+      Wh is where &#8220;momentum&#8221; lives.</div>
+    <div class="try"><span class="n">3</span><b>Catch the turn.</b> On <b>Cold snap</b>, compare Copy today vs Trained
+      around Days 2&#8211;4 (hover the prediction cards). Copying yesterday is always one day late at a turning point.</div>
+  </div>
+</div>
+
+<footer>Companion to the <b>Neural Networks from the Ground Up</b> decks &#183; the &#8220;Trained&#8221; weights were found by real gradient descent on thousands of synthetic weeks &#183; everything runs in your browser.</footer>
+</div>
+
+<script>
+"use strict";
+if (window.NodeList && !NodeList.prototype.forEach) NodeList.prototype.forEach = Array.prototype.forEach;
+if (!Element.prototype.closest){
+  Element.prototype.closest = function(sel){
+    let el = this;
+    while (el && el.nodeType === 1){ if (el.matches ? el.matches(sel) : el.webkitMatchesSelector(sel)) return el; el = el.parentElement; }
+    return null;
+  };
+}
+
+/* ============================ constants ============================ */
+const T = 8, HN = 3;
+const TM = 15, TS = 10, HM = 60, HS = 25;   // normalization
+const $ = id => document.getElementById(id);
+const clamp = (v,a,b) => Math.min(b, Math.max(a,v));
+function fmt(v,d){ return (v==null||!isFinite(v)) ? "\u2014" : v.toFixed(d==null?2:d); }
+function fmt1(v){ return fmt(v,1); }
+const NAVY="#1E2761", CORAL="#F96167", WARM="#E1574B", COLD="#3E6FB0";
+function tempColor(t){ return t >= 15 ? WARM : COLD; }
+
+/* ============================ presets ============================ */
+const WEEKS = [
+  ["warming","Warming week",[10,12,13,14,16,18,20,21],[83,78,71,66,58,54,52,55],
+   "a steady climb from 10\u00B0 to 21\u00B0 while humidity slides \u2014 trends everywhere, so memory should shine."],
+  ["coldsnap","Cold snap",[9,5,3,2,2,3,4,4],[80,84,81,77,80,73,66,64],
+   "temperature dives to 2\u00B0 then slowly recovers \u2014 watch who catches the turning point."],
+  ["cooling","Cooling week",[18,17,14,13,11,10,11,10],[57,61,62,67,67,66,63,60],
+   "a slow slide downward all week."],
+  ["steady","Steady week",[17,17,17,18,17,15,16,18],[63,62,62,62,65,67,61,56],
+   "barely anything changes \u2014 even \u201Ccopy today\u201D looks clever here."],
+];
+const WSETS = {
+  avg: {
+    label: "Always average",
+    hint: "all zeros \u2014 predicts 15\u00B0 \u00B7 60% every day, no matter what. Meteorologists call this baseline \u201Cclimatology\u201D.",
+    Wx: [[0,0],[0,0],[0,0]], Wh: [[0,0,0],[0,0,0],[0,0,0]], b: [0,0,0],
+    Wy: [[0,0,0],[0,0,0]], by: [0,0],
+  },
+  copy: {
+    label: "Copy today",
+    hint: "hand-built so the output \u2248 today\u2019s weather \u2014 the classic \u201Cpersistence\u201D forecast. No memory used at all.",
+    Wx: [[0.25,0],[0,0.25],[0,0]], Wh: [[0,0,0],[0,0,0],[0,0,0]], b: [0,0,0],
+    Wy: [[4.05,0,0],[0,4.05,0]], by: [0,0],
+  },
+  trained: {
+    label: "Trained",
+    hint: "found by real gradient descent on thousands of synthetic weeks \u2014 notice Wh is full of nonzeros: the network learned to use its memory.",
+    Wx: [[-0.49,0.14],[-0.65,0.26],[-0.34,-0.79]],
+    Wh: [[-0.25,0.35,0.02],[-0.40,-0.19,-0.14],[0.18,0.00,-0.01]],
+    b: [0.03,0.08,0.20],
+    Wy: [[-0.69,-1.21,-0.56],[0.08,0.74,-0.81]],
+    by: [0.17,0.14],
+  },
+};
+const CUSTOM_W_HINT = "custom weights \u2014 your 26 numbers. The whole week recomputes as you type.";
+const CUSTOM_WK_HINT = "custom weather \u2014 your numbers. Edit any day\u2019s T or H.";
+
+/* ============================ state ============================ */
+const S = {
+  t: 0, pin: -1,
+  Tv: WEEKS[0][2].slice(), Hv: WEEKS[0][3].slice(),
+  wk: "warming", wt: "trained",
+  Wx: null, Wh: null, b: null, Wy: null, by: null,
+  hs: [], zs: [], yn: [],
+};
+function loadW(key){
+  const w = WSETS[key];
+  S.Wx = w.Wx.map(r=>r.slice()); S.Wh = w.Wh.map(r=>r.slice());
+  S.b = w.b.slice(); S.Wy = w.Wy.map(r=>r.slice()); S.by = w.by.slice();
+}
+loadW("trained");
+
+/* ============================ math ============================ */
+function xnorm(k){ return [ (S.Tv[k-1]-TM)/TS, (S.Hv[k-1]-HM)/HS ]; }
+function denorm(y){ return [ TM + TS*y[0], HM + HS*y[1] ]; }
+function recompute(){
+  S.hs = [[0,0,0]]; S.zs = [null]; S.yn = [null];
+  for (let k=1; k<=T; k++){
+    const x = xnorm(k), hp = S.hs[k-1];
+    const z = [0,0,0], h = [0,0,0];
+    for (let i=0;i<HN;i++){
+      z[i] = S.Wx[i][0]*x[0] + S.Wx[i][1]*x[1]
+           + S.Wh[i][0]*hp[0] + S.Wh[i][1]*hp[1] + S.Wh[i][2]*hp[2] + S.b[i];
+      h[i] = Math.tanh(z[i]);
+    }
+    const y = [0,0];
+    for (let o=0;o<2;o++) y[o] = S.Wy[o][0]*h[0] + S.Wy[o][1]*h[1] + S.Wy[o][2]*h[2] + S.by[o];
+    S.zs[k] = z; S.hs[k] = h; S.yn[k] = y;
+  }
+}
+function predReal(k){ return denorm(S.yn[k]); }
+function missAt(k){                       // prediction after day k vs actual day k+1 (k<=7)
+  if (k > 7) return null;
+  const p = predReal(k);
+  return [ Math.abs(p[0]-S.Tv[k]), Math.abs(p[1]-S.Hv[k]) ];
+}
+function avgMiss(){
+  const kk = Math.min(S.t, 7);
+  if (kk < 1) return null;
+  let a=0, c=0;
+  for (let k=1;k<=kk;k++){ const m = missAt(k); a += m[0]; c += m[1]; }
+  return [a/kk, c/kk];
+}
+
+/* ============================ rolled ============================ */
+function vec3(v, d){ return "("+fmt(v[0],d)+","+fmt(v[1],d)+","+fmt(v[2],d)+")"; }
+function renderRolled(){
+  $("rolledH").textContent = vec3(S.hs[S.t]);
+  if (S.t === 0){ $("rolledY").textContent = "guess: \u2014"; }
+  else {
+    const p = predReal(S.t);
+    $("rolledY").textContent = "guess for Day "+(S.t+1)+": "+fmt1(p[0])+"\u00B0 \u00B7 "+Math.round(p[1])+"%";
+  }
+  $("rolledT").textContent = S.t === 0 ? "before Day 1" : "after reading Day "+S.t;
+  $("rolledX").textContent = S.t < T
+    ? "next in: Day "+(S.t+1)+" \u2192 "+S.Tv[S.t]+"\u00B0 \u00B7 "+S.Hv[S.t]+"%"
+    : "the week is fully read";
+  $("tnow").textContent = S.t;
+}
+
+/* ============================ chain ============================ */
+function sub(k){
+  const map = {0:"\u2080",1:"\u2081",2:"\u2082",3:"\u2083",4:"\u2084",5:"\u2085",6:"\u2086",7:"\u2087",8:"\u2088",9:"\u2089"};
+  return String(k).split("").map(c=>map[c]||c).join("");
+}
+function barHTML(v){
+  const half = clamp(Math.abs(v),0,1)*23;
+  const left = v >= 0 ? "50%" : (50 - half/46*100) + "%";
+  const col = v >= 0 ? NAVY : CORAL;
+  return '<i style="left:'+(v>=0?"50%":"calc(50% - "+half+"px)")+';width:'+half+'px;background:'+col+'"></i>';
+}
+function predHTML(k, solid){
+  const final = (k === T);
+  let inner = '<div class="plab">'+(final ? "FORECAST \u2192 DAY 9" : "guess \u2192 Day "+(k+1))+'</div>';
+  if (solid){
+    const p = predReal(k);
+    inner += '<div class="pvals"><span class="tv" style="color:'+tempColor(p[0])+'">'+fmt1(p[0])+'\u00B0</span>'+
+             '<span class="hv2" style="color:#3E9E70">'+Math.round(p[1])+'%</span></div>';
+    if (!final){
+      const m = missAt(k);
+      inner += '<div class="pact">actual <b>'+S.Tv[k]+'\u00B0 \u00B7 '+S.Hv[k]+'%</b><br>miss '+fmt1(m[0])+'\u00B0 \u00B7 '+Math.round(m[1])+'%</div>';
+    } else {
+      inner += '<div class="pact">Day 9 hasn\u2019t happened \u2014<br>this one is a real forecast</div>';
+    }
+  } else {
+    inner += '<div class="pvals" style="color:#B4BDD4">? \u00B7 ?</div>' +
+             '<div class="pact">'+(final ? "the real forecast" : "actual "+S.Tv[k]+"\u00B0 \u00B7 "+S.Hv[k]+"%")+'</div>';
+  }
+  return '<div class="predcard'+(final?' final':'')+(solid?'':' ghost')+'">'+inner+'</div>';
+}
+function cellHTML(k, solid){
+  const h = S.hs[k];
+  let rows = "";
+  for (let i=0;i<HN;i++){
+    rows += '<div class="nrow" data-n="'+i+'"><span class="ni">n'+(i+1)+'</span>'+
+            '<span class="nbar">'+(solid?barHTML(h[i]):'')+'</span>'+
+            '<span class="nv">'+(solid?fmt(h[i]):"?")+'</span></div>';
+  }
+  return '<div class="cellbox">'+
+    '<span class="cellname">SAME CELL</span>'+rows+
+    '<div class="cellsub">h'+sub(k)+' \u2014 3 memory neurons</div></div>';
+}
+function renderChain(){
+  const chain = $("chain");
+  let html = '<div class="h0col"><div class="h0chip" id="h0chip">h\u2080 = (0,0,0)</div>' +
+             '<div class="h0lab">the starting<br>memory</div></div>';
+  for (let k=1; k<=T; k++){
+    const solid = k <= S.t;
+    html += '<div class="col'+(solid?'':' ghost')+'" data-k="'+k+'">' +
+      predHTML(k, solid) +
+      '<div class="uparr"><span class="wlab">\u00D7 Wy</span></div>' +
+      '<div class="conn"><span class="wlab">\u00D7 Wh</span></div>' +
+      cellHTML(k, solid) +
+      '<div class="uparr xarr"><span class="wlab">\u00D7 Wx</span></div>' +
+      '<div class="xrow"><span class="xtag t">T</span><input class="xin" data-k="'+k+'" data-dim="0" value="'+S.Tv[k-1]+'" step="0.5" aria-label="temperature day '+k+'"><span class="xunit">\u00B0C</span></div>' +
+      '<div class="xrow"><span class="xtag h">H</span><input class="xin" data-k="'+k+'" data-dim="1" value="'+S.Hv[k-1]+'" step="1" aria-label="humidity day '+k+'"><span class="xunit">%</span></div>' +
+      '<div class="daylab">Day '+k+'</div>' +
+    '</div>';
+  }
+  chain.innerHTML = html;
+}
+function renderScore(){
+  const m = avgMiss();
+  $("score").innerHTML = m == null ? "avg miss so far: \u2014"
+    : "avg miss so far: <b>"+fmt1(m[0])+"\u00B0C</b> \u00B7 <b>"+fmt1(m[1])+"%</b>";
+}
+
+/* ============================ inspector ============================ */
+function mgrid(vals, r, c, cls){
+  let h = '<div><div class="mg" style="grid-template-columns:repeat('+c+',46px)">';
+  for (let i=0;i<r;i++) for (let j=0;j<c;j++){
+    const v = (c===1) ? vals[i] : vals[i][j];
+    h += '<div class="mc '+(cls||'')+'" data-row="'+i+'">'+fmt(v,2)+'</div>';
+  }
+  return h + '</div><div class="mgl">%L%</div></div>';
+}
+function lab(html, l){ return html.replace("%L%", l); }
+function inspect(k){
+  if (k < 1 || k > S.t) return;
+  const x = xnorm(k), hp = S.hs[k-1], z = S.zs[k], h = S.hs[k], y = S.yn[k];
+  const p = predReal(k);
+  let out =
+    '<div class="mrow">' +
+      lab(mgrid(S.Wx,3,2), "Wx") + '<span class="msym">\u00B7</span>' +
+      lab(mgrid(x,2,1), "x"+sub(k)+" (scaled)") + '<span class="msym">+</span>' +
+      lab(mgrid(S.Wh,3,3), "Wh") + '<span class="msym">\u00B7</span>' +
+      lab(mgrid(hp,3,1), "h"+sub(k-1)) + '<span class="msym">+</span>' +
+      lab(mgrid(S.b,3,1), "b") + '<span class="msym">=</span>' +
+      lab(mgrid(z,3,1), "z") + '<span class="msym">\u2192 tanh \u2192</span>' +
+      lab(mgrid(h,3,1,"res"), "h"+sub(k)) +
+    '</div>' +
+    '<div class="mrow">' +
+      lab(mgrid(S.Wy,2,3), "Wy") + '<span class="msym">\u00B7</span>' +
+      lab(mgrid(h,3,1,"res"), "h"+sub(k)) + '<span class="msym">+</span>' +
+      lab(mgrid(S.by,2,1), "by") + '<span class="msym">=</span>' +
+      lab(mgrid(y,2,1,"hres"), "\u0177 (scaled)") +
+      '<span class="msym">\u2192</span>' +
+      '<span class="mnote">unscale: <b>'+fmt1(p[0])+'\u00B0C \u00B7 '+Math.round(p[1])+'%</b>' +
+      (k<=7 ? ' &nbsp;vs actual Day '+(k+1)+': <b>'+S.Tv[k]+'\u00B0 \u00B7 '+S.Hv[k]+'%</b>' : ' &nbsp;\u2014 a true forecast for Day 9') +
+      '</span>' +
+    '</div>' +
+    '<div class="nline" id="nline">hover a neuron bar in the cell for that neuron\u2019s own sum</div>';
+  $("insp").innerHTML = out;
+  clearHl();
+  const cols = $("chain").querySelectorAll(".col");
+  const col = cols[k-1];
+  if (col){
+    col.querySelector(".cellbox").classList.add("hl");
+    col.querySelector(".predcard").classList.add("hl");
+    col.querySelectorAll(".xin").forEach(e=>e.classList.add("hl"));
+  }
+  if (k === 1){ const c0 = $("h0chip"); if (c0) c0.classList.add("prev"); }
+  else { const pc = cols[k-2]; if (pc) pc.querySelector(".cellbox").classList.add("prev"); }
+}
+function neuronLine(k, i){
+  if (k < 1 || k > S.t) return;
+  const x = xnorm(k), hp = S.hs[k-1], z = S.zs[k], h = S.hs[k];
+  document.querySelectorAll("#insp .mc.rh").forEach(e=>e.classList.remove("rh"));
+  document.querySelectorAll('#insp .mrow:first-child .mc[data-row="'+i+'"]').forEach(e=>e.classList.add("rh"));
+  const el = $("nline");
+  if (!el) return;
+  el.innerHTML = "neuron "+(i+1)+":  tanh( "+
+    fmt(S.Wx[i][0],2)+"\u00B7"+fmt(x[0],2)+" + "+fmt(S.Wx[i][1],2)+"\u00B7"+fmt(x[1],2)+" + "+
+    fmt(S.Wh[i][0],2)+"\u00B7"+fmt(hp[0],2)+" + "+fmt(S.Wh[i][1],2)+"\u00B7"+fmt(hp[1],2)+" + "+
+    fmt(S.Wh[i][2],2)+"\u00B7"+fmt(hp[2],2)+" + "+fmt(S.b[i],2)+
+    " ) = tanh("+fmt(z[i],2)+') = <span class="big">'+fmt(h[i])+"</span>";
+}
+function clearHl(){
+  document.querySelectorAll(".cellbox.hl,.cellbox.prev,.xin.hl,.predcard.hl").forEach(e=>e.classList.remove("hl","prev"));
+  const c0 = $("h0chip"); if (c0) c0.classList.remove("prev");
+}
+function inspectDefault(){
+  clearHl();
+  if (S.pin >= 1 && S.pin <= S.t){ inspect(S.pin); return; }
+  if (S.t >= 1){ inspect(S.t); return; }
+  $("insp").innerHTML = '<span class="hint">Press Step, or hover a solid cell.</span>';
+}
+
+/* ============================ render all ============================ */
+function renderAll(popK){
+  recompute();
+  renderRolled();
+  renderChain();
+  renderScore();
+  markNow();
+  if (popK && !window.matchMedia("(prefers-reduced-motion: reduce)").matches){
+    const col = $("chain").querySelectorAll(".col")[popK-1];
+    if (col) col.classList.add("pop");
+  }
+  inspectDefault();
+}
+function markNow(){
+  $("chain").querySelectorAll(".col").forEach((c,i)=>{
+    c.querySelector(".cellbox").classList.toggle("now", (i+1) === S.t);
+  });
+}
+/* in-place refresh of solid columns (keeps input focus) */
+function softUpdate(){
+  const cols = $("chain").querySelectorAll(".col");
+  cols.forEach((c,i)=>{
+    const k = i+1;
+    if (k > S.t){
+      // future: refresh the "actual" preview inside ghost predcard
+      const pa = c.querySelector(".predcard .pact");
+      if (pa && k !== T) pa.innerHTML = "actual "+S.Tv[k]+"\u00B0 \u00B7 "+S.Hv[k]+"%";
+      return;
+    }
+    const h = S.hs[k];
+    c.querySelectorAll(".nrow").forEach((r,ni)=>{
+      r.querySelector(".nbar").innerHTML = barHTML(h[ni]);
+      r.querySelector(".nv").textContent = fmt(h[ni]);
+    });
+    const p = predReal(k);
+    const pv = c.querySelector(".predcard .pvals");
+    pv.innerHTML = '<span class="tv" style="color:'+tempColor(p[0])+'">'+fmt1(p[0])+'\u00B0</span>'+
+                   '<span class="hv2" style="color:#3E9E70">'+Math.round(p[1])+'%</span>';
+    const pa = c.querySelector(".predcard .pact");
+    if (k <= 7){
+      const m = missAt(k);
+      pa.innerHTML = 'actual <b>'+S.Tv[k]+'\u00B0 \u00B7 '+S.Hv[k]+'%</b><br>miss '+fmt1(m[0])+'\u00B0 \u00B7 '+Math.round(m[1])+'%';
+    }
+  });
+  renderRolled(); renderScore(); inspectDefault();
+}
+
+/* ============================ transport ============================ */
+let timer = null;
+function fireLoop(){
+  const g = $("rolledsvg");
+  g.classList.add("fire");
+  setTimeout(()=>g.classList.remove("fire"), 460);
+}
+function doStep(){
+  if (S.t >= T){ stopPlay(); return; }
+  S.t++;
+  fireLoop();
+  renderAll(S.t);
+  if (S.t >= T) stopPlay();
+}
+function doBack(){ if (S.t > 0){ S.t--; if (S.pin > S.t) S.pin = -1; renderAll(); } }
+function doReset(){ S.t = 0; S.pin = -1; stopPlay(); renderAll(); }
+function stopPlay(){ if (timer){ clearInterval(timer); timer = null; } $("play").innerHTML = "\u25B6 Play the week"; }
+function togglePlay(){
+  if (timer){ stopPlay(); return; }
+  if (S.t >= T){ S.t = 0; S.pin = -1; renderAll(); }
+  $("play").innerHTML = "\u23F8 Pause";
+  const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  timer = setInterval(doStep, reduced ? 1500 : 1000);
+}
+
+/* ============================ weights UI ============================ */
+function buildWgrid(id, key, r, c){
+  const el = $(id);
+  el.style.gridTemplateColumns = "repeat("+c+", 52px)";
+  let h = "";
+  for (let i=0;i<r;i++) for (let j=0;j<c;j++){
+    const v = (c===1 && r>1) ? S[key][i] : (r===1 && c>1 ? S[key][j] : S[key][i][j]);
+    const cls = v<0 ? "neg" : (v===0 ? "zero" : "");
+    h += '<input type="number" step="0.05" value="'+(+v.toFixed(2))+'" data-i="'+i+'" data-j="'+j+'" class="'+cls+'">';
+  }
+  el.innerHTML = h;
+  el.oninput = e=>{
+    const t = e.target; if (t.tagName !== "INPUT") return;
+    const v = parseFloat(t.value), val = isFinite(v) ? v : 0;
+    const i = +t.dataset.i, j = +t.dataset.j;
+    if (c===1 && r>1) S[key][i] = val;
+    else if (r===1 && c>1) S[key][j] = val;
+    else S[key][i][j] = val;
+    t.classList.toggle("neg", val<0); t.classList.toggle("zero", !val);
+    if (S.wt !== ""){
+      S.wt = "";
+      document.querySelectorAll("#wtpreset button").forEach(b=>b.classList.remove("on"));
+      $("wthint").textContent = CUSTOM_W_HINT;
+    }
+    recompute(); softUpdate();
+  };
+}
+function buildAllW(){
+  buildWgrid("gWx","Wx",3,2);
+  buildWgrid("gWh","Wh",3,3);
+  buildWgrid("gb","b",3,1);
+  buildWgrid("gWy","Wy",2,3);
+  buildWgrid("gby","by",1,2);
+}
+
+/* ============================ wire up ============================ */
+function segBuild(el, options, get, set){
+  el.innerHTML = options.map(o=>'<button data-v="'+o[0]+'" class="'+(get()===o[0]?'on':'')+'">'+o[1]+'</button>').join("");
+  el.onclick = e=>{
+    const b = e.target.closest("button"); if (!b) return;
+    set(b.dataset.v);
+    Array.prototype.forEach.call(el.children, c=>c.classList.toggle("on", c===b));
+  };
+}
+function setPhint(txt){ $("phint").innerHTML = "<b>this week:</b> " + txt; }
+function init(){
+  segBuild($("wkpreset"), WEEKS.map(w=>[w[0],w[1]]), ()=>S.wk, v=>{
+    S.wk = v;
+    const w = WEEKS.find(q=>q[0]===v);
+    S.Tv = w[2].slice(); S.Hv = w[3].slice();
+    S.t = 0; S.pin = -1;
+    setPhint(w[4]);
+    renderAll();
+  });
+  segBuild($("wtpreset"), [["avg",WSETS.avg.label],["copy",WSETS.copy.label],["trained",WSETS.trained.label]],
+    ()=>S.wt, v=>{
+      S.wt = v; loadW(v);
+      $("wthint").textContent = WSETS[v].hint;
+      buildAllW();
+      recompute(); softUpdate();
+    });
+  setPhint(WEEKS[0][4]);
+  $("wthint").textContent = WSETS.trained.hint;
+  $("tmax").textContent = T;
+  buildAllW();
+
+  $("step").onclick = ()=>{ stopPlay(); doStep(); };
+  $("back").onclick = ()=>{ stopPlay(); doBack(); };
+  $("reset").onclick = doReset;
+  $("play").onclick = togglePlay;
+
+  const chain = $("chain");
+  chain.addEventListener("input", e=>{
+    const t = e.target;
+    if (!t.classList.contains("xin")) return;
+    const v = parseFloat(t.value);
+    const k = +t.dataset.k, dim = +t.dataset.dim;
+    if (dim === 0) S.Tv[k-1] = isFinite(v) ? clamp(v, -5, 40) : 15;
+    else S.Hv[k-1] = isFinite(v) ? clamp(v, 20, 100) : 60;
+    if (S.wk !== ""){
+      S.wk = "";
+      document.querySelectorAll("#wkpreset button").forEach(b=>b.classList.remove("on"));
+      setPhint(CUSTOM_WK_HINT);
+    }
+    recompute(); softUpdate();
+  });
+  chain.addEventListener("mouseover", e=>{
+    const nr = e.target.closest(".nrow");
+    const cb = e.target.closest(".cellbox");
+    if (!cb) return;
+    const col = cb.closest(".col");
+    if (!col || col.classList.contains("ghost")) return;
+    const k = +col.dataset.k;
+    if (!$("nline") || S.pin !== k) {
+      if (S.pin < 1 || S.pin !== k) inspect(k);
+    }
+    if (nr) neuronLine(k, +nr.dataset.n);
+  });
+  chain.addEventListener("click", e=>{
+    const cb = e.target.closest(".cellbox"); if (!cb) return;
+    const col = cb.closest(".col"); if (!col || col.classList.contains("ghost")) return;
+    S.pin = +col.dataset.k; inspect(S.pin);
+  });
+  chain.addEventListener("mouseleave", inspectDefault);
+
+  renderAll();
+}
+init();
+</script>
+</body>
+</html>

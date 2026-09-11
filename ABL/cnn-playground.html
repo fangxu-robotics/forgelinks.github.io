@@ -1,0 +1,878 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Convolution Playground — see a CNN think</title>
+<style>
+  :root{
+    --navy:#1E2761; --mid:#4A6FA5; --ice:#CADCFC; --tint:#EEF3FC;
+    --coral:#F96167; --coral-t:#FDE1E2; --ink:#3A4356; --line:#DCE4F4;
+    --paper:#FFFFFF; --wash:#F6F8FD; --gray:#6B7280;
+    --serif:"Iowan Old Style","Palatino Linotype",Palatino,Cambria,Georgia,serif;
+    --sans:"Segoe UI",-apple-system,BlinkMacSystemFont,"Helvetica Neue",Arial,sans-serif;
+    --mono:Consolas,Menlo,"Courier New",monospace;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0}
+  body{background:var(--wash);color:var(--ink);font-family:var(--sans);font-size:15px;line-height:1.5}
+  .wrap{max-width:none;margin:0 auto;padding:26px 24px 60px}
+
+  header{display:flex;flex-wrap:wrap;align-items:baseline;gap:8px 18px;margin-bottom:14px}
+  header h1{font-family:var(--serif);color:var(--navy);font-size:30px;margin:0;font-weight:700}
+  header p{margin:0;color:var(--gray);font-size:14px}
+
+  /* ---------- toolbar ---------- */
+  .toolbar{background:var(--paper);border:1px solid var(--line);border-radius:12px;
+           padding:12px 16px;display:flex;flex-wrap:wrap;gap:12px 20px;align-items:center}
+  .samples{display:flex;gap:8px;align-items:center}
+  .samples button.thumb{padding:0;border:2px solid var(--line);border-radius:9px;background:#fff;
+      cursor:pointer;line-height:0;overflow:hidden}
+  .samples button.thumb.on{border-color:var(--coral)}
+  .samples button.thumb canvas{display:block;width:44px;height:44px;image-rendering:pixelated}
+  .tool-sep{width:1px;align-self:stretch;background:var(--line)}
+  .ctl{display:flex;align-items:center;gap:8px}
+  .ctl > span.name{font-size:13px;color:var(--navy);font-weight:600;white-space:nowrap}
+  .seg{display:inline-flex;border:1px solid var(--line);border-radius:8px;overflow:hidden;background:var(--tint)}
+  .seg button{border:0;background:transparent;padding:5px 11px;font:600 13px var(--sans);
+              color:var(--mid);cursor:pointer;white-space:nowrap}
+  .seg button.on{background:var(--navy);color:#fff}
+  .seg button:focus-visible{outline:2px solid var(--coral);outline-offset:-2px}
+  select{padding:5px 8px;border:1px solid var(--line);border-radius:8px;background:#fff;
+         color:var(--navy);font:600 13px var(--sans)}
+  button.btn{border:1px solid var(--line);background:var(--tint);color:var(--navy);
+             border-radius:8px;padding:6px 13px;cursor:pointer;font:600 13px var(--sans)}
+  button.btn:hover{background:#E3ECFB}
+  button.btn.primary{background:var(--navy);border-color:var(--navy);color:#fff}
+  button.btn.primary:hover{background:#27327A}
+  button.btn:focus-visible,select:focus-visible{outline:2px solid var(--coral);outline-offset:2px}
+  label.check{display:inline-flex;align-items:center;gap:6px;font-size:13px;color:var(--ink);cursor:pointer;white-space:nowrap}
+  label.check input{accent-color:var(--navy);width:14px;height:14px}
+  .prevwrap{display:none;align-items:center;gap:7px}
+  .prevwrap canvas{width:44px;height:44px;image-rendering:pixelated;border:2px solid var(--coral);border-radius:9px;display:block}
+  .prevwrap span{font-size:11.5px;color:var(--gray);line-height:1.3}
+  .err{color:#C4373D;font-size:12.5px;display:none;width:100%}
+
+  /* ---------- pipeline chips ---------- */
+  .pipe{display:flex;flex-wrap:wrap;align-items:center;gap:7px;margin:12px 2px 10px}
+  .pipe .chip{font-family:var(--mono);font-size:12.5px;color:var(--navy);background:var(--paper);
+              border:1px solid var(--line);border-radius:7px;padding:3px 8px;white-space:nowrap}
+  .pipe .chip.hot{background:var(--coral-t);border-color:#F8C9CB;color:#C4373D}
+  .pipe .arrow{color:var(--mid);font-size:13px}
+  .pipe .lbl{font-size:12px;color:var(--gray)}
+
+  /* ---------- the board (row 1) ---------- */
+  .board{background:var(--paper);border:1px solid var(--line);border-radius:14px;
+         padding:18px 20px 16px;overflow-x:auto}
+  .boardrow{display:flex;align-items:flex-start;gap:14px;width:max-content;margin:0 auto}
+  .colhead{display:flex;align-items:center;gap:10px;margin-bottom:7px;min-height:22px}
+  .colhead .t{font-family:var(--serif);font-size:16.5px;color:var(--navy);font-weight:700;white-space:nowrap}
+  .colhead .shape{font:600 12px var(--mono);color:var(--mid);background:var(--tint);
+                  border:1px solid var(--line);border-radius:6px;padding:1px 7px;white-space:nowrap}
+  label.mini{display:inline-flex;align-items:center;gap:5px;font:600 11.5px var(--sans);
+             color:var(--gray);cursor:pointer;margin-left:auto;white-space:nowrap}
+  label.mini input{accent-color:var(--navy);width:13px;height:13px}
+  .under{font-size:12px;color:var(--gray);margin-top:7px;max-width:100%;line-height:1.45}
+  .under b{color:var(--navy)}
+
+  .op{align-self:flex-start;font-family:var(--serif);font-size:26px;color:var(--mid);
+      padding:0 2px;user-select:none}
+  .op small{display:block;font:italic 11px var(--sans);color:var(--gray);text-align:center;margin-top:2px}
+
+  .gridbox{display:inline-block;border:1px solid var(--line);border-radius:8px;padding:6px;background:#fff}
+  .mat{display:grid;gap:1px;background:var(--line);border:1px solid var(--line);width:max-content}
+  .mat .c{position:relative;display:flex;align-items:center;justify-content:center;
+          font-family:var(--mono);user-select:none}
+  .mat .c span{pointer-events:none}
+  .mat .c.win{outline:2.5px solid var(--coral);outline-offset:-2.5px;z-index:2}
+  .mat .c.blk{outline:2.5px solid var(--mid);outline-offset:-2.5px;z-index:2}
+  .mat .c.argm{outline:3px solid var(--navy);outline-offset:-3px;z-index:3}
+  .mat .c.sel{box-shadow:inset 0 0 0 3px var(--navy);z-index:3}
+  .mat.hoverable .c{cursor:crosshair}
+
+  .kernel{display:grid;gap:4px;width:max-content}
+  .kernel input{text-align:center;font-family:var(--mono);font-weight:600;color:var(--navy);
+                border:1px solid var(--line);border-radius:6px;background:var(--tint);padding:0}
+  .kernel input.neg{color:#C4373D;background:var(--coral-t)}
+  .kernel input.zero{color:#98A2BC;background:#fff}
+  .kernel input:focus{outline:2px solid var(--coral);outline-offset:1px;background:#fff}
+  .kctl{display:flex;flex-direction:column;gap:7px;margin-top:10px}
+  .kctl .row{display:flex;align-items:center;gap:8px}
+
+  .legend{display:flex;align-items:center;gap:6px;font-size:11.5px;color:var(--gray);margin-top:7px}
+  .legend .bar{width:110px;height:9px;border-radius:5px;border:1px solid var(--line);
+    background:linear-gradient(90deg,var(--coral),#fff 50%,var(--navy))}
+
+  /* ---------- row 2: controls + inspectors ---------- */
+  .row2{display:flex;flex-wrap:wrap;gap:16px;margin-top:16px;align-items:stretch}
+  .panel{background:var(--paper);border:1px solid var(--line);border-radius:12px;padding:14px 18px}
+  .panel h3{font-family:var(--serif);color:var(--navy);font-size:16.5px;margin:0 0 10px;font-weight:700}
+  #convpanel{flex:0 1 340px;min-width:290px}
+  #inspectpanel{flex:1 1 420px;min-width:340px}
+  #poolpanel{flex:1 1 330px;min-width:300px}
+  .controls{display:flex;flex-wrap:wrap;gap:10px 16px;align-items:center}
+  .note{font-size:12.5px;color:var(--gray);margin-top:10px;line-height:1.5}
+  .note b{color:var(--navy)}
+
+  .inspector{display:flex;flex-wrap:wrap;gap:14px;align-items:center;min-height:88px}
+  .inspector .imat{display:grid;gap:1px;background:var(--line);border:1px solid var(--line)}
+  .inspector .imat .c{display:flex;align-items:center;justify-content:center;
+                      font:600 10px var(--mono);background:#fff}
+  .inspector .iop{font-family:var(--serif);font-size:20px;color:var(--navy)}
+  .inspector .result{font-family:var(--mono);font-size:13.5px;color:var(--ink);line-height:1.55}
+  .inspector .result b{color:var(--coral);font-size:17px}
+  .inspector .hint{color:var(--gray);font-size:13px;font-family:var(--sans)}
+  .inspector .tag{font-size:11px;color:var(--gray);text-align:center;margin-top:3px;font-family:var(--sans)}
+
+  footer{margin-top:22px;color:var(--gray);font-size:12.5px;text-align:center}
+  footer b{color:var(--navy)}
+
+  @media (max-width:760px){ header h1{font-size:25px} .wrap{padding:18px 12px 50px} }
+  @media (prefers-reduced-motion: reduce){ *{scroll-behavior:auto} }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <h1>Convolution Playground</h1>
+  <p>Move your mouse over the <b style="color:var(--navy)">input image</b> to slide the kernel yourself;
+     hover the <b style="color:var(--navy)">feature map</b> to steer the pooling window. Click to pin, click again elsewhere to move.</p>
+</header>
+
+<!-- ============ toolbar ============ -->
+<div class="toolbar" id="toolbar">
+  <div class="samples" id="samples"></div>
+  <div class="tool-sep"></div>
+  <label class="btn" style="cursor:pointer">Load a photo…
+    <input type="file" id="file" accept="image/*" style="display:none"></label>
+  <div class="prevwrap" id="prevwrap">
+    <canvas id="prev" width="20" height="20"></canvas>
+    <span>your photo →<br>square, gray, 20×20</span>
+  </div>
+  <div class="ctl"><span class="name">Make square by</span>
+    <div class="seg" id="fitseg" role="group" aria-label="square method"></div>
+  </div>
+  <label class="check"><input type="checkbox" id="autoc" checked> Auto contrast</label>
+  <label class="check"><input type="checkbox" id="invert"> Invert ink ⇄ paper</label>
+  <div class="err" id="fileerr">Couldn't read that image — try a normal JPG or PNG file.</div>
+</div>
+
+<div class="pipe" id="pipe" aria-label="Tensor shapes through the pipeline"></div>
+
+<!-- ============ row 1: the board ============ -->
+<div class="board" id="board">
+  <div class="boardrow">
+
+    <div class="col">
+      <div class="colhead"><span class="t">Input image</span><span class="shape">(20, 20)</span>
+        <label class="mini"><input type="checkbox" id="numsIn"> numbers</label></div>
+      <div class="gridbox"><div class="mat hoverable" id="imgmat"></div></div>
+      <div class="under" style="max-width:420px">brightness 0–255 · <b>move your mouse here</b> — the coral window is the kernel; the math appears below</div>
+    </div>
+
+    <div class="op">⊛<small>convolve<br>with</small></div>
+
+    <div class="col">
+      <div class="colhead"><span class="t">Kernel</span><span class="shape" id="kshape">3 × 3</span></div>
+      <div class="kernel" id="kernel"></div>
+      <div class="kctl" id="kctl">
+        <div class="row"><div class="seg" id="mseg" role="group" aria-label="kernel size"></div></div>
+        <div class="row"><select id="preset" aria-label="kernel preset" style="width:100%"></select></div>
+      </div>
+      <div class="under" id="kunder">type any number — a real CNN <i>learns</i> these <span id="kcount">9</span> values</div>
+    </div>
+
+    <div class="op">=<small>feature<br>map</small></div>
+
+    <div class="col">
+      <div class="colhead"><span class="t">Feature map</span><span class="shape" id="fshape"></span>
+        <label class="mini"><input type="checkbox" id="numsFeat" checked> numbers</label></div>
+      <div class="gridbox"><div class="mat hoverable" id="featmat"></div></div>
+      <div class="legend"><span id="legneg">−max</span><span class="bar"></span><span id="legpos">+max</span></div>
+      <div class="under" style="max-width:400px"><b>hover here</b> to choose the blue pooling tile</div>
+    </div>
+
+    <div class="op">→<small><span id="poolop">max</span><br>pool</small></div>
+
+    <div class="col">
+      <div class="colhead"><span class="t">Pooled map</span><span class="shape" id="pshape"></span>
+        <label class="mini"><input type="checkbox" id="numsPool" checked> numbers</label></div>
+      <div class="gridbox"><div class="mat hoverable" id="poolmat"></div></div>
+      <div class="kctl" id="kctl">
+        <div class="row"><span style="font:600 12px var(--sans);color:var(--navy)">size</span>
+          <div class="seg" id="nseg" role="group" aria-label="pool size"></div></div>
+        <div class="row"><span style="font:600 12px var(--sans);color:var(--navy)">keep</span>
+          <div class="seg" id="modeseg" role="group" aria-label="pooling mode"></div></div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- ============ row 2 ============ -->
+<div class="row2">
+  <div class="panel" id="convpanel">
+    <h3>Convolution settings</h3>
+    <div class="controls">
+      <div class="ctl"><span class="name">Stride</span><div class="seg" id="sseg"></div></div>
+      <div class="ctl"><span class="name">Padding</span><div class="seg" id="pseg"></div></div>
+      <label class="check"><input type="checkbox" id="relu"> ReLU — keep only positives</label>
+    </div>
+    <div class="controls" style="margin-top:12px">
+      <button class="btn primary" id="play">▶ Auto-play the slide</button>
+      <button class="btn" id="stop">Reset pins</button>
+    </div>
+    <div class="note" id="convnote"></div>
+  </div>
+
+  <div class="panel" id="inspectpanel">
+    <h3>Convolution arithmetic — window ⊙ kernel</h3>
+    <div class="inspector" id="inspector">
+      <span class="hint">Move your mouse over the input image (or press Auto-play).</span>
+    </div>
+  </div>
+
+  <div class="panel" id="poolpanel">
+    <h3>Pooling tile</h3>
+    <div class="inspector" id="poolinspect" style="min-height:70px">
+      <span class="hint">Hover the feature map or the pooled map.</span>
+    </div>
+    <div class="note" id="poolnote"></div>
+  </div>
+</div>
+
+<footer>Companion to the <b>CNN Basics</b> slides — same colors, same math. Everything runs in your browser; photos never leave this page.</footer>
+</div>
+
+<canvas id="work" width="20" height="20" style="display:none"></canvas>
+<canvas id="art" width="120" height="120" style="display:none"></canvas>
+
+<script>
+"use strict";
+/* tiny compatibility shims for older engines */
+if (window.NodeList && !NodeList.prototype.forEach) NodeList.prototype.forEach = Array.prototype.forEach;
+if (!Element.prototype.closest){
+  Element.prototype.closest = function(sel){
+    let el = this;
+    while (el && el.nodeType === 1){ if (el.matches ? el.matches(sel) : el.webkitMatchesSelector(sel)) return el; el = el.parentElement; }
+    return null;
+  };
+}
+if (!String.prototype.startsWith) String.prototype.startsWith = function(p){ return this.indexOf(p) === 0; };
+
+/* ============================ state ============================ */
+const N = 20;
+const S = {
+  img: new Float64Array(N*N),
+  source: { type:"sample", key:"seven" },   // or {type:"upload"}
+  uploadImg: null,                          // HTMLImageElement of the last photo
+  fit: "crop", autoc: true, invert: false,
+  numsIn: false, numsFeat: true, numsPool: true,
+  m: 3, stride: 1, padding: "valid", relu: false,
+  kernel: [], preset: "vedge",
+  n: 2, mode: "max",
+  feat: [], featR: [], fw: 0, maxAbs: 1,
+  pool: null, pw: 0,
+  pinConv: -1, pinPool: -1,
+  px: { in: 20, feat: 20, pool: 24, kw: 48, kh: 36, kfs: 13 },
+};
+
+/* ============================ helpers ============================ */
+const $ = id => document.getElementById(id);
+const clamp = (v,a,b) => Math.min(b, Math.max(a,v));
+function fmt(v){
+  if (!isFinite(v)) return "–";
+  const a = Math.abs(v);
+  if (a >= 100) return String(Math.round(v));
+  if (Math.abs(v - Math.round(v)) < 1e-9) return String(Math.round(v));
+  return v.toFixed(1);
+}
+function mixHex(h1, h2, t){
+  const a = parseInt(h1.slice(1),16), b = parseInt(h2.slice(1),16);
+  const r = Math.round(((a>>16)&255)*(1-t) + ((b>>16)&255)*t);
+  const g = Math.round(((a>>8)&255)*(1-t) + ((b>>8)&255)*t);
+  const bl= Math.round((a&255)*(1-t) + (b&255)*t);
+  return "rgb("+r+","+g+","+bl+")";
+}
+const NAVY="#1E2761", CORAL="#F96167";
+function grayColor(v){ return mixHex("#FFFFFF", NAVY, clamp(v,0,255)/255*0.92); }
+function divColor(v, maxAbs){
+  if (maxAbs < 1e-9) return "#FFFFFF";
+  const t = Math.pow(clamp(Math.abs(v)/maxAbs,0,1), 0.8);
+  return v >= 0 ? mixHex("#FFFFFF", NAVY, t*0.92) : mixHex("#FFFFFF", CORAL, t*0.92);
+}
+function invertArr(a){
+  const r = new Float64Array(a.length);
+  for (let i=0;i<a.length;i++) r[i] = 255 - a[i];
+  return r;
+}
+
+/* ============================ image sources ============================ */
+const SAMPLES = [
+  ["seven","Seven", g=>{ g.lineWidth=14; g.beginPath(); g.moveTo(22,26); g.lineTo(92,26); g.lineTo(52,102); g.stroke(); }],
+  ["cross","Cross", g=>{ g.lineWidth=13; g.beginPath(); g.moveTo(24,24); g.lineTo(96,96); g.moveTo(96,24); g.lineTo(24,96); g.stroke(); }],
+  ["ring","Ring",  g=>{ g.lineWidth=13; g.beginPath(); g.arc(60,60,36,0,7); g.stroke(); }],
+  ["smile","Smile",g=>{ g.lineWidth=8; g.beginPath(); g.arc(60,60,42,0,7); g.stroke();
+                        g.fillStyle="#000"; g.beginPath(); g.arc(45,48,6,0,7); g.fill();
+                        g.beginPath(); g.arc(75,48,6,0,7); g.fill();
+                        g.beginPath(); g.lineWidth=8; g.arc(60,62,22,0.35,Math.PI-0.35); g.stroke(); }],
+  ["grad","Fade",  g=>{ const lg=g.createLinearGradient(0,0,120,0); lg.addColorStop(0,"#000"); lg.addColorStop(1,"#fff");
+                        g.fillStyle=lg; g.fillRect(0,0,120,120); }],
+  ["check","Check",g=>{ for(let i=0;i<10;i++)for(let j=0;j<10;j++){ if((i+j)%2===0){g.fillStyle="#000"; g.fillRect(j*12,i*12,12,12);} } }],
+];
+function drawSample(fn){
+  const c = $("art"), g = c.getContext("2d");
+  g.fillStyle = "#fff"; g.fillRect(0,0,120,120);
+  g.strokeStyle = "#000"; g.fillStyle = "#000"; g.lineCap="round"; g.lineJoin="round";
+  fn(g);
+  return c;
+}
+function toGrid(srcCanvas){
+  const w = $("work"), g = w.getContext("2d");
+  g.imageSmoothingEnabled = true;
+  try { g.imageSmoothingQuality = "high"; } catch(e){}
+  g.fillStyle="#fff"; g.fillRect(0,0,N,N);
+  g.drawImage(srcCanvas, 0, 0, N, N);
+  const d = g.getImageData(0,0,N,N).data;
+  const out = new Float64Array(N*N);
+  for (let i=0;i<N*N;i++){
+    const lum = 0.299*d[i*4] + 0.587*d[i*4+1] + 0.114*d[i*4+2];
+    out[i] = Math.round(255 - lum);           // dark pixels -> high "ink" value
+  }
+  return out;
+}
+function autoContrast(a){
+  const s = Array.prototype.slice.call(a).sort((x,y)=>x-y);
+  const lo = s[Math.floor(s.length*0.02)], hi = s[Math.floor(s.length*0.98)];
+  if (hi - lo < 8) return a;                   // flat image, leave it
+  const r = new Float64Array(a.length);
+  for (let i=0;i<a.length;i++) r[i] = clamp(Math.round((a[i]-lo)/(hi-lo)*255), 0, 255);
+  return r;
+}
+
+/* build S.img from the current source + toolbar options */
+function reprocessInput(){
+  let grid;
+  if (S.source.type === "sample"){
+    const s = SAMPLES.find(x=>x[0]===S.source.key);
+    grid = toGrid(drawSample(s[2]));
+  } else {
+    const im = S.uploadImg;
+    const c = $("art"), g = c.getContext("2d");
+    g.fillStyle="#fff"; g.fillRect(0,0,120,120);
+    if (S.fit === "crop"){
+      const side = Math.min(im.naturalWidth || im.width, im.naturalHeight || im.height);
+      const sx = ((im.naturalWidth||im.width) - side)/2, sy = ((im.naturalHeight||im.height) - side)/2;
+      g.drawImage(im, sx, sy, side, side, 0, 0, 120, 120);
+    } else {
+      g.drawImage(im, 0, 0, 120, 120);        // stretch to square
+    }
+    grid = toGrid(c);
+    if (S.autoc) grid = autoContrast(grid);
+  }
+  if (S.invert) grid = invertArr(grid);
+  S.img = grid;
+  // preview + sample highlight
+  const up = S.source.type === "upload";
+  $("prevwrap").style.display = up ? "flex" : "none";
+  if (up) drawPreview();
+  document.querySelectorAll(".samples .thumb").forEach(b=>
+    b.classList.toggle("on", !up && b.dataset.k === S.source.key));
+  recomputeAll();
+}
+function drawPreview(){
+  const g = $("prev").getContext("2d");
+  const im = g.createImageData(20,20);
+  for (let i=0;i<400;i++){
+    const t = clamp(S.img[i],0,255)/255*0.92;
+    im.data[i*4]   = Math.round(255*(1-t)+30*t);
+    im.data[i*4+1] = Math.round(255*(1-t)+39*t);
+    im.data[i*4+2] = Math.round(255*(1-t)+97*t);
+    im.data[i*4+3] = 255;
+  }
+  g.putImageData(im,0,0);
+}
+function loadFile(file){
+  $("fileerr").style.display = "none";
+  if (!file){ return; }
+  if (file.type && !file.type.startsWith("image/")){ $("fileerr").style.display="block"; return; }
+  const reader = new FileReader();
+  reader.onerror = ()=>{ $("fileerr").style.display="block"; };
+  reader.onload = ()=>{
+    const im = new Image();
+    im.onload = ()=>{ S.uploadImg = im; S.source = { type:"upload" }; reprocessInput(); };
+    im.onerror = ()=>{ $("fileerr").style.display="block"; };
+    im.src = reader.result;                    // data: URL — works in sandboxed pages
+  };
+  reader.readAsDataURL(file);
+}
+
+/* ============================ kernels ============================ */
+function presetsFor(m){
+  const mid = (m-1)/2;
+  const mk = f => { const k=[]; for(let i=0;i<m;i++)for(let j=0;j<m;j++)k.push(f(i,j)); return k; };
+  const P = [
+    ["vedge","Vertical edges", mk((i,j)=> j<mid?1 : j>mid?-1 : 0)],
+    ["hedge","Horizontal edges", mk((i,j)=> i<mid?1 : i>mid?-1 : 0)],
+    ["blur","Blur (average)", mk(()=> +(1/(m*m)).toFixed(2))],
+    ["identity","Identity (do nothing)", mk((i,j)=> (i===mid&&j===mid)?1:0)],
+  ];
+  if (m===3){
+    P.splice(2,0,
+      ["sobelx","Sobel — vertical edges", [1,0,-1,2,0,-2,1,0,-1]],
+      ["sobely","Sobel — horizontal edges", [1,2,1,0,0,0,-1,-2,-1]]);
+    P.push(
+      ["sharpen","Sharpen", [0,-1,0,-1,5,-1,0,-1,0]],
+      ["outline","Outline", [-1,-1,-1,-1,8,-1,-1,-1,-1]],
+      ["emboss","Emboss", [-2,-1,0,-1,1,1,0,1,2]]);
+  }
+  P.push(["custom","Custom (edit the grid)", null]);
+  return P;
+}
+function applyPreset(key){
+  const P = presetsFor(S.m), hit = P.find(p=>p[0]===key) || P[0];
+  S.preset = hit[0];
+  if (hit[2]) S.kernel = hit[2].slice();
+  buildPresetSelect(); renderKernel();
+  recomputeConv();
+}
+
+/* ============================ math ============================ */
+function convolve(){
+  const m = S.m, s = S.stride;
+  const p = S.padding === "same" ? Math.floor(m/2) : 0;
+  const NP = N + 2*p;
+  const pad = new Float64Array(NP*NP);
+  for (let i=0;i<N;i++) for (let j=0;j<N;j++) pad[(i+p)*NP + (j+p)] = S.img[i*N+j];
+  const fw = Math.floor((NP - m)/s) + 1;
+  const out = new Float64Array(fw*fw);
+  for (let oi=0; oi<fw; oi++)
+    for (let oj=0; oj<fw; oj++){
+      let acc = 0;
+      for (let ki=0; ki<m; ki++)
+        for (let kj=0; kj<m; kj++)
+          acc += pad[(oi*s+ki)*NP + (oj*s+kj)] * S.kernel[ki*m+kj];
+      out[oi*fw+oj] = acc;
+    }
+  return {out, fw, p, NP, pad};
+}
+function windowOf(idx){
+  const g = S._geom, m = S.m, s = S.stride, fw = S.fw;
+  const oi = Math.floor(idx/fw), oj = idx%fw;
+  const win = [];
+  for (let ki=0;ki<m;ki++) for (let kj=0;kj<m;kj++)
+    win.push(g.pad[(oi*s+ki)*g.NP + (oj*s+kj)]);
+  return {win, oi, oj};
+}
+function poolCompute(){
+  const src = S.featR, fw = S.fw, n = S.n;
+  const pw = Math.floor(fw/n);
+  const out = new Float64Array(pw*pw);
+  const arg = new Int32Array(pw*pw);
+  for (let i=0;i<pw;i++) for (let j=0;j<pw;j++){
+    let best = -Infinity, bi = -1, sum = 0;
+    for (let a=0;a<n;a++) for (let b=0;b<n;b++){
+      const idx = (i*n+a)*fw + (j*n+b), v = src[idx];
+      sum += v;
+      if (v > best){ best = v; bi = idx; }
+    }
+    out[i*pw+j] = S.mode === "max" ? best : sum/(n*n);
+    arg[i*pw+j] = bi;
+  }
+  return {out, pw, arg};
+}
+
+/* ============================ rendering ============================ */
+function numFont(px){ return clamp(Math.round(px*0.42), 7, 11); }
+
+/* fit every matrix into the board's width — no horizontal scrolling */
+function layoutSizes(){
+  const board = $("board");
+  const availW = (board.clientWidth || window.innerWidth - 48) - 40;   // minus board padding
+  const inB = 20;
+  const featB = clamp(Math.floor(400/Math.max(S.fw,1)), 12, 24);
+  const poolB = clamp(Math.floor(220/Math.max(S.pw,1)), 16, 34);
+  const kwB = S.m===3 ? 48 : S.m===5 ? 36 : 27;
+  const fixed = 3*46 + 6*14 + 3*16 + 36;                               // operators, gaps, box padding, safety
+  const needed = 20*inB + S.fw*featB + S.pw*poolB + (S.m*kwB + (S.m-1)*4);
+  const scale = clamp((availW - fixed) / needed, 0.55, 1.12);
+  S.px.in   = clamp(Math.round(inB*scale), 11, 26);
+  S.px.feat = clamp(Math.round(featB*scale), 9, 26);
+  S.px.pool = clamp(Math.round(poolB*scale), 12, 36);
+  S.px.kw   = clamp(Math.round(kwB*scale), 23, 52);
+  S.px.kh   = Math.round(S.px.kw*0.76);
+  S.px.kfs  = clamp(Math.round(S.px.kw*0.28), 9, 14);
+  // vertically center the operator glyphs on the input grid
+  const gridH = 20*S.px.in + 21;
+  const top = Math.max(42, Math.round(29 + 7 + gridH/2 - 26));
+  document.querySelectorAll(".op").forEach(o=>{ o.style.marginTop = top + "px"; });
+}
+
+function renderPipe(){
+  const pad = S.padding === "same" ? "same" : "valid";
+  $("pipe").innerHTML =
+    '<span class="lbl">shapes:</span>'+
+    '<span class="chip">20 × 20</span><span class="arrow">→</span>'+
+    '<span class="chip hot">conv '+S.m+'×'+S.m+', stride '+S.stride+', '+pad+'</span><span class="arrow">→</span>'+
+    '<span class="chip">'+S.fw+' × '+S.fw+'</span><span class="arrow">→</span>'+
+    '<span class="chip'+(S.relu?' hot':'')+'">ReLU '+(S.relu?'on':'off')+'</span><span class="arrow">→</span>'+
+    '<span class="chip hot">'+S.mode+'-pool '+S.n+'×'+S.n+'</span><span class="arrow">→</span>'+
+    '<span class="chip">'+S.pw+' × '+S.pw+'</span>';
+  $("poolop").textContent = S.mode;
+}
+
+function renderInput(){
+  const px = S.px.in;
+  const el = $("imgmat");
+  el.style.gridTemplateColumns = "repeat("+N+", "+px+"px)";
+  const fs = numFont(px);
+  let h = "";
+  for (let i=0;i<N*N;i++){
+    const v = S.img[i];
+    const tc = v > 130 ? "#EDF2FF" : "#3A4356";
+    h += '<div class="c" data-i="'+i+'" style="width:'+px+'px;height:'+px+'px;background:'+grayColor(v)+';color:'+tc+'" title="'+Math.round(v)+'">'+
+         (S.numsIn ? '<span style="font-size:'+fs+'px">'+Math.round(v)+'</span>' : '') + '</div>';
+  }
+  el.innerHTML = h;
+}
+
+function renderKernel(){
+  const m = S.m, el = $("kernel");
+  const w = S.px.kw, hgt = S.px.kh, fs = S.px.kfs;
+  el.style.gridTemplateColumns = "repeat("+m+", "+w+"px)";
+  let h = "";
+  for (let i=0;i<m*m;i++){
+    const v = S.kernel[i];
+    const cls = v<0 ? "neg" : (v===0 ? "zero" : "");
+    h += '<input type="number" step="0.1" value="'+(+v.toFixed(2))+'" data-i="'+i+'" class="'+cls+'"'+
+         ' style="width:'+w+'px;height:'+hgt+'px;font-size:'+fs+'px" aria-label="kernel value '+i+'">';
+  }
+  el.innerHTML = h;
+  $("kshape").textContent = m+" × "+m;
+  $("kcount").textContent = m*m;
+  const gw = m*w + (m-1)*4;
+  $("kctl").style.width = Math.max(gw, 140) + "px";
+  $("kunder").style.maxWidth = Math.max(gw, 150) + "px";
+}
+
+function renderFeature(){
+  const fw = S.fw, el = $("featmat");
+  const px = S.px.feat;
+  el.style.gridTemplateColumns = "repeat("+fw+", "+px+"px)";
+  const fs = numFont(px);
+  let h = "";
+  for (let i=0;i<fw*fw;i++){
+    const v = S.featR[i];
+    const dark = Math.abs(v) > 0.55*S.maxAbs;
+    h += '<div class="c" data-i="'+i+'" style="width:'+px+'px;height:'+px+'px;background:'+divColor(v,S.maxAbs)+';color:'+(dark?'#fff':'#3A4356')+'" title="'+fmt(v)+'">'+
+         (S.numsFeat ? '<span style="font-size:'+fs+'px">'+fmt(v)+'</span>' : '') + '</div>';
+  }
+  el.innerHTML = h;
+  $("fshape").textContent = "("+fw+", "+fw+")";
+  $("legneg").textContent = "−"+fmt(S.maxAbs);
+  $("legpos").textContent = "+"+fmt(S.maxAbs);
+}
+
+function renderPool(){
+  const pool = S.pool, pw = S.pw, el = $("poolmat");
+  const px = S.px.pool;
+  el.style.gridTemplateColumns = "repeat("+pw+", "+px+"px)";
+  const fs = numFont(px);
+  let h = "";
+  for (let i=0;i<pw*pw;i++){
+    const v = pool.out[i];
+    const dark = Math.abs(v) > 0.55*S.maxAbs;
+    h += '<div class="c" data-i="'+i+'" style="width:'+px+'px;height:'+px+'px;background:'+divColor(v,S.maxAbs)+';color:'+(dark?'#fff':'#3A4356')+'" title="'+fmt(v)+'">'+
+         (S.numsPool ? '<span style="font-size:'+fs+'px">'+fmt(v)+'</span>' : '') + '</div>';
+  }
+  el.innerHTML = h;
+  $("pshape").textContent = "("+pw+", "+pw+")";
+  const rem = S.fw - pw*S.n;
+  $("poolnote").innerHTML = rem > 0
+    ? "<b>Note:</b> "+S.fw+" isn't divisible by "+S.n+", so the last "+rem+" row(s) and column(s) of the feature map are dropped — "+S.fw+"×"+S.fw+" → "+pw+"×"+pw+"."
+    : S.fw+"×"+S.fw+" tiles perfectly into "+pw+"×"+pw+" — each pooled number summarizes one "+S.n+"×"+S.n+" patch.";
+}
+
+/* ---------- inspectors ---------- */
+function miniGrid(vals, m, kind){
+  const cw = m<=3 ? 30 : m===5 ? 24 : 20;
+  const fs = m<=3 ? 10 : m===5 ? 9 : 8;
+  let h = '<div><div class="imat" style="grid-template-columns:repeat('+m+','+cw+'px)">';
+  for (let i=0;i<m*m;i++){
+    let bg = "#fff", tc = "#3A4356";
+    if (kind==="win"){ bg = grayColor(vals[i]); if (vals[i]>130) tc = "#EDF2FF"; }
+    else { bg = vals[i]<0 ? "#FDE1E2" : vals[i]>0 ? "#E2EAFB" : "#FFFFFF"; }
+    h += '<div class="c" style="background:'+bg+';color:'+tc+';height:'+(cw-6)+'px;font-size:'+fs+'px">'+fmt(vals[i])+'</div>';
+  }
+  return h + '</div><div class="tag">'+(kind==="win"?"window":"kernel")+'</div></div>';
+}
+
+function inspectConv(idx){
+  const w = windowOf(idx), m = S.m;
+  const raw = S.feat[idx], after = S.featR[idx];
+  const reluBit = S.relu ? ' → ReLU: max(0, '+fmt(raw)+') = <b>'+fmt(after)+'</b>' : '';
+  $("inspector").innerHTML =
+    miniGrid(w.win, m, "win") + '<span class="iop">⊙</span>' + miniGrid(S.kernel, m, "ker") +
+    '<span class="iop">=</span>' +
+    '<div class="result">sum of '+(m*m)+' products = <b>'+fmt(raw)+'</b>'+reluBit+
+    '<div class="hint" style="margin-top:3px">feature cell — row '+w.oi+', column '+w.oj+'</div></div>';
+  // highlight window on input (skip padded cells)
+  const p = S._geom.p, s = S.stride;
+  document.querySelectorAll("#imgmat .c.win").forEach(c=>c.classList.remove("win"));
+  const ic = $("imgmat").children;
+  for (let ki=0;ki<m;ki++) for (let kj=0;kj<m;kj++){
+    const ii = w.oi*s+ki-p, jj = w.oj*s+kj-p;
+    if (ii>=0 && ii<N && jj>=0 && jj<N){
+      const c = ic[ii*N+jj]; if (c) c.classList.add("win");
+    }
+  }
+  document.querySelectorAll("#featmat .c.sel").forEach(c=>c.classList.remove("sel"));
+  const fc = $("featmat").children[idx];
+  if (fc) fc.classList.add("sel");
+}
+function clearConvInspect(){
+  document.querySelectorAll("#imgmat .c.win").forEach(c=>c.classList.remove("win"));
+  document.querySelectorAll("#featmat .c.sel").forEach(c=>c.classList.remove("sel"));
+  $("inspector").innerHTML = '<span class="hint">Move your mouse over the input image (or press Auto-play).</span>';
+}
+
+function inspectPool(tile){
+  const pool = S.pool, n = S.n, fw = S.fw, pw = S.pw;
+  const i = Math.floor(tile/pw), j = tile%pw;
+  document.querySelectorAll("#featmat .c.blk, #featmat .c.argm").forEach(c=>c.classList.remove("blk","argm"));
+  const vals = [];
+  const fcells = $("featmat").children;
+  for (let a=0;a<n;a++) for (let b=0;b<n;b++){
+    const fi = (i*n+a)*fw + (j*n+b);
+    vals.push(S.featR[fi]);
+    const c = fcells[fi]; if (c) c.classList.add("blk");
+  }
+  if (S.mode==="max"){ const c = fcells[pool.arg[tile]]; if (c) c.classList.add("argm"); }
+  const list = vals.map(fmt);
+  const shown = list.length <= 16 ? list.join(", ") : list.slice(0,16).join(", ") + ", …";
+  $("poolinspect").innerHTML =
+    '<div class="result">'+S.mode+'('+shown+')<br>= <b>'+fmt(pool.out[tile])+'</b>'+
+    '<div class="hint" style="margin-top:3px">tile row '+i+', column '+j+
+    (S.mode==="max" ? ' — the winner is ringed in navy' : ' — the tile average')+'</div></div>';
+  document.querySelectorAll("#poolmat .c.sel").forEach(c=>c.classList.remove("sel"));
+  const pc = $("poolmat").children[tile];
+  if (pc) pc.classList.add("sel");
+}
+function clearPoolInspect(){
+  document.querySelectorAll("#featmat .c.blk, #featmat .c.argm").forEach(c=>c.classList.remove("blk","argm"));
+  document.querySelectorAll("#poolmat .c.sel").forEach(c=>c.classList.remove("sel"));
+  $("poolinspect").innerHTML = '<span class="hint">Hover the feature map or the pooled map.</span>';
+}
+
+/* ============================ recompute ============================ */
+function recomputeConv(reKernel){
+  const g = convolve();
+  S._geom = g; S.fw = g.fw; S.feat = g.out; S.pinConv = -1; S.pinPool = -1;
+  if (S.relu){
+    const r = new Float64Array(g.out.length);
+    for (let i=0;i<g.out.length;i++) r[i] = Math.max(0, g.out[i]);
+    S.featR = r;
+  } else S.featR = g.out;
+  let mx = 0;
+  for (let i=0;i<S.feat.length;i++){ const a = Math.abs(S.feat[i]); if (a>mx) mx=a; }
+  S.maxAbs = mx || 1;
+  stopPlay();
+  S.pool = poolCompute(); S.pw = S.pool.pw;
+  layoutSizes();
+  renderInput(); if (reKernel !== false) renderKernel();
+  renderFeature(); renderPool(); renderPipe();
+  const p = S._geom.p;
+  $("convnote").innerHTML =
+    'output size = (20'+(S.padding==="same" ? ' + 2·'+p : '')+' − '+S.m+') / '+S.stride+' + 1 = <b>'+S.fw+'</b>'+
+    '<br>kernel weights: '+(S.m*S.m)+' + 1 bias — a real Conv2D layer learns them all.';
+  clearConvInspect(); clearPoolInspect();
+}
+function recomputeAll(){ recomputeConv(); }
+
+/* ============================ play animation ============================ */
+let timer = null, playIdx = 0;
+function stopPlay(){ if (timer){ clearInterval(timer); timer=null; } $("play").textContent = "▶ Auto-play the slide"; }
+function togglePlay(){
+  if (timer){ stopPlay(); return; }
+  playIdx = 0;
+  const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  $("play").textContent = "⏸ Pause";
+  timer = setInterval(()=>{
+    if (playIdx >= S.fw*S.fw){ stopPlay(); clearConvInspect(); return; }
+    inspectConv(playIdx++);
+  }, reduced ? 260 : 110);
+}
+
+/* ============================ mouse mapping ============================ */
+/* input cell (ii,jj) -> nearest valid output index (kernel centered on cursor) */
+function inputCellToOut(ii, jj){
+  const p = S._geom.p, s = S.stride, m = S.m, fw = S.fw;
+  const oi = clamp(Math.round((ii + p - (m-1)/2) / s), 0, fw-1);
+  const oj = clamp(Math.round((jj + p - (m-1)/2) / s), 0, fw-1);
+  return oi*fw + oj;
+}
+/* feature cell -> pooling tile (or -1 if in the dropped strip) */
+function featCellToTile(fi, fj){
+  const n = S.n, pw = S.pw;
+  const ti = Math.floor(fi/n), tj = Math.floor(fj/n);
+  return (ti < pw && tj < pw) ? ti*pw + tj : -1;
+}
+
+/* ============================ controls ============================ */
+function seg(el, options, get, set){
+  el.innerHTML = options.map(o=>'<button data-v="'+o[0]+'" class="'+(String(get())===String(o[0])?'on':'')+'">'+o[1]+'</button>').join("");
+  el.onclick = e=>{
+    const b = e.target.closest("button"); if (!b) return;
+    set(b.dataset.v);
+    Array.prototype.forEach.call(el.children, c=>c.classList.toggle("on", c===b));
+  };
+}
+function buildPresetSelect(){
+  const P = presetsFor(S.m);
+  $("preset").innerHTML = P.map(p=>'<option value="'+p[0]+'" '+(p[0]===S.preset?'selected':'')+'>'+p[1]+'</option>').join("");
+}
+function buildSamples(){
+  const box = $("samples");
+  box.innerHTML = "";
+  for (const [key,label,fn] of SAMPLES){
+    const b = document.createElement("button");
+    b.className = "thumb"; b.dataset.k = key; b.title = label;
+    const cv = document.createElement("canvas"); cv.width = 20; cv.height = 20;
+    b.appendChild(cv);
+    box.appendChild(b);
+    const grid = toGrid(drawSample(fn));
+    const g = cv.getContext("2d");
+    const im = g.createImageData(20,20);
+    for (let i=0;i<400;i++){
+      const t = clamp(grid[i],0,255)/255*0.92;
+      im.data[i*4]   = Math.round(255*(1-t)+30*t);
+      im.data[i*4+1] = Math.round(255*(1-t)+39*t);
+      im.data[i*4+2] = Math.round(255*(1-t)+97*t);
+      im.data[i*4+3] = 255;
+    }
+    g.putImageData(im,0,0);
+    b.onclick = ()=>{ S.source = { type:"sample", key }; reprocessInput(); };
+  }
+}
+
+/* ============================ wire up ============================ */
+function init(){
+  buildSamples();
+  seg($("fitseg"), [["crop","crop center"],["stretch","stretch"]], ()=>S.fit,
+      v=>{ S.fit=v; if (S.source.type==="upload") reprocessInput(); });
+  seg($("mseg"), [[3,"3×3"],[5,"5×5"],[7,"7×7"]], ()=>S.m, v=>{
+    S.m = +v;
+    if (!presetsFor(S.m).some(p=>p[0]===S.preset && p[2])) S.preset = "vedge";
+    applyPreset(S.preset);
+  });
+  seg($("sseg"), [[1,"1"],[2,"2"],[3,"3"]], ()=>S.stride, v=>{ S.stride=+v; recomputeConv(); });
+  seg($("pseg"), [["valid","valid"],["same","same (pad 0s)"]], ()=>S.padding, v=>{ S.padding=v; recomputeConv(); });
+  seg($("nseg"), [[2,"2×2"],[3,"3×3"],[4,"4×4"]], ()=>S.n,
+      v=>{ S.n=+v; S.pinPool=-1; S.pool=poolCompute(); S.pw=S.pool.pw; renderPool(); renderPipe(); clearPoolInspect(); });
+  seg($("modeseg"), [["max","Max"],["avg","Average"]], ()=>S.mode,
+      v=>{ S.mode=v; S.pool=poolCompute(); S.pw=S.pool.pw; renderPool(); renderPipe(); clearPoolInspect(); });
+
+  $("preset").onchange = e=>applyPreset(e.target.value);
+  $("kernel").addEventListener("input", e=>{
+    const t = e.target; if (!t.dataset.i) return;
+    const v = parseFloat(t.value);
+    S.kernel[+t.dataset.i] = isFinite(v) ? v : 0;
+    t.classList.toggle("neg", v<0); t.classList.toggle("zero", !v);
+    if (S.preset!=="custom"){ S.preset="custom"; buildPresetSelect(); }
+    recomputeConv(false);                    // keep focus in the kernel input
+  });
+  $("relu").onchange = e=>{ S.relu = e.target.checked; recomputeConv(); };
+  $("autoc").onchange = e=>{ S.autoc = e.target.checked; if (S.source.type==="upload") reprocessInput(); };
+  $("invert").onchange = e=>{ S.invert = e.target.checked; reprocessInput(); };
+  $("numsIn").onchange   = e=>{ S.numsIn = e.target.checked; renderInput(); };
+  $("numsFeat").onchange = e=>{ S.numsFeat = e.target.checked; renderFeature(); if (S.pinPool>=0) inspectPool(S.pinPool); };
+  $("numsPool").onchange = e=>{ S.numsPool = e.target.checked; renderPool(); if (S.pinPool>=0) inspectPool(S.pinPool); };
+
+  $("file").onchange = e=>{ loadFile(e.target.files[0]); e.target.value = ""; };
+  const tb = $("toolbar");
+  document.addEventListener("dragover", e=>e.preventDefault());
+  document.addEventListener("drop", e=>{
+    e.preventDefault();
+    if (e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0]) loadFile(e.dataTransfer.files[0]);
+  });
+
+  /* --- input grid drives the kernel window --- */
+  const im = $("imgmat");
+  function convFromEvent(e){
+    const c = e.target.closest(".c"); if (!c) return -1;
+    const idx = +c.dataset.i;
+    return inputCellToOut(Math.floor(idx/N), idx%N);
+  }
+  im.addEventListener("mouseover", e=>{
+    if (timer) return;
+    const o = convFromEvent(e); if (o>=0) inspectConv(o);
+  });
+  im.addEventListener("click", e=>{
+    const o = convFromEvent(e); if (o<0) return;
+    stopPlay(); S.pinConv = o; inspectConv(o);
+  });
+  im.addEventListener("mouseleave", ()=>{
+    if (timer) return;
+    if (S.pinConv >= 0 && S.pinConv < S.fw*S.fw) inspectConv(S.pinConv); else clearConvInspect();
+  });
+
+  /* --- feature map drives the pooling tile (hover) + shows conv cell on click --- */
+  const fm = $("featmat");
+  function tileFromEvent(e){
+    const c = e.target.closest(".c"); if (!c) return -1;
+    const idx = +c.dataset.i;
+    return featCellToTile(Math.floor(idx/S.fw), idx%S.fw);
+  }
+  fm.addEventListener("mouseover", e=>{
+    const t = tileFromEvent(e);
+    if (t>=0) inspectPool(t);
+    else {
+      document.querySelectorAll("#featmat .c.blk, #featmat .c.argm").forEach(c=>c.classList.remove("blk","argm"));
+      $("poolinspect").innerHTML = '<span class="hint">This strip is dropped — '+S.fw+' doesn\\u2019t divide by '+S.n+'.</span>';
+    }
+  });
+  fm.addEventListener("click", e=>{
+    const t = tileFromEvent(e); if (t<0) return;
+    S.pinPool = t; inspectPool(t);
+  });
+  fm.addEventListener("mouseleave", ()=>{
+    if (S.pinPool >= 0 && S.pinPool < S.pw*S.pw) inspectPool(S.pinPool); else clearPoolInspect();
+  });
+
+  /* --- pooled map also drives the tile --- */
+  const pm = $("poolmat");
+  pm.addEventListener("mouseover", e=>{
+    const c = e.target.closest(".c"); if (!c) return;
+    inspectPool(+c.dataset.i);
+  });
+  pm.addEventListener("click", e=>{
+    const c = e.target.closest(".c"); if (!c) return;
+    S.pinPool = +c.dataset.i; inspectPool(S.pinPool);
+  });
+  pm.addEventListener("mouseleave", ()=>{
+    if (S.pinPool >= 0 && S.pinPool < S.pw*S.pw) inspectPool(S.pinPool); else clearPoolInspect();
+  });
+
+  $("play").onclick = togglePlay;
+  $("stop").onclick = ()=>{ stopPlay(); S.pinConv = -1; S.pinPool = -1; clearConvInspect(); clearPoolInspect(); };
+
+  let rT = null;
+  window.addEventListener("resize", ()=>{
+    clearTimeout(rT);
+    rT = setTimeout(()=>{
+      layoutSizes();
+      renderInput(); renderKernel(); renderFeature(); renderPool();
+      if (S.pinConv >= 0) inspectConv(S.pinConv);
+      if (S.pinPool >= 0) inspectPool(S.pinPool);
+    }, 140);
+  });
+
+  S.kernel = presetsFor(3).find(p=>p[0]==="vedge")[2].slice();
+  buildPresetSelect(); renderKernel();
+  reprocessInput();
+}
+init();
+</script>
+</body>
+</html>
