@@ -21,9 +21,6 @@
     color: #1a2b3d; text-decoration: none; border-radius: 10px;
   }
   ol li a > span:nth-child(2) { flex: 1 1 0; min-width: 0; }
-  @media (max-width: 520px) {
-    ol li .ext { flex: 0 0 100%; margin-left: 0; text-align: right; }
-  }
   ol li a:hover { background: #f4f7fb; }
   ol li .num { flex: 0 0 auto; font-weight: 600; color: #2563eb; min-width: 1.4em; font-variant-numeric: tabular-nums; }
   ol li .name { font-weight: 600; }
@@ -31,6 +28,9 @@
   ol li .ext { flex: 0 0 auto; margin-left: auto; color: #8a9bb0; font-size: 13px; white-space: nowrap; }
   .foot { margin-top: 36px; color: #8a9bb0; font-size: 13px; }
   .foot a { color: #2563eb; text-decoration: none; }
+  @media (max-width: 520px) {
+    ol li .ext { flex: 0 0 100%; margin-left: 0; text-align: right; }
+  }
 </style>
 </head>
 <body>
